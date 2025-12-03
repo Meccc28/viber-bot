@@ -46,6 +46,7 @@ bot.onText(/get FO (.+)/i, async (msg, match) => {
     });
 
     const rows = res.data.values;
+    console.log(rows);
     if (!rows || rows.length === 0) {
       bot.sendMessage(chatId, 'No records found.');
       return;
