@@ -2,8 +2,10 @@ services:
   - type: web
     name: telegram-bot
     env: node
-    buildCommand: "npm install"
-    startCommand: "node index.js"
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: node index.js
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
@@ -11,3 +13,8 @@ services:
         sync: false
       - key: SPREADSHEET_ID
         sync: false
+    autoDeploy: true
+    branch: main
+    pullRequestPreviewsEnabled: false
+    ports:
+      - port: 10000
