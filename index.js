@@ -1,63 +1,41 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const { Bot, Events, Message } = require("viber-bot");
-const { google } = require("googleapis");
+const TelegramBot = require('node-telegram-bot-api');
+const { google } = require('googleapis');
 
-// GOOGLE SHEETS SETUP
+// Telegram bot setup
+// Use the environment variable name, NOT the actual token
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+
+// Google Sheets setup
 const auth = new google.auth.GoogleAuth({
-    keyFile: "service_account.json",
-    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+  // Parse the JSON string from the environment variable
+  credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
+  scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
 });
+const sheets = google.sheets({ version: 'v4', auth });
 
-const SPREADSHEET_ID = "PUT_YOUR_SPREADSHEET_ID_HERE";
-const RANGE = "Sheet1!A:C";
+// Command listener
+bot.on('message', async (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text;
 
-async function searchGoogleSheet(name) {
-    const client = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: client });
+  if (text.startsWith('get FO')) {
+    const name = text.replace('get FO ', '').trim();
+    try {
+      const res = await sheets.spreadsheets.values.get({
+        // Use environment variable for spreadsheet ID
+        spreadsheetId: process.env.SPREADSHEET_ID,
+        range: 'Sheet1!A:C', // adjust based on your sheet
+      });
 
-    const res = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: RANGE
-    });
-
-    const rows = res.data.values || [];
-    return rows.find(row => row[0].toLowerCase() === name.toLowerCase()) || null;
-}
-
-// VIBER BOT SETUP
-const bot = new Bot({
-    authToken: "PUT_YOUR_VIBER_BOT_TOKEN_HERE",
-    name: "InfoBot",
-    avatar: ""
-});
-
-// HANDLE USER MESSAGES
-bot.on(Events.MESSAGE_RECEIVED, async (message, response) => {
-    const text = message.text;
-
-    if (text.toLowerCase().startsWith("get ")) {
-        const name = text.slice(4).trim();
-
-        const result = await searchGoogleSheet(name);
-        if (!result) {
-            response.send(new Message.Text("No record found."));
-        } else {
-            response.send(new Message.Text(
-                `${result[0]} | ${result[1]} | ${result[2]}`
-            ));
-        }
-        return;
+      const row = res.data.values.find(r => r[0] === name);
+      if (row) {
+        bot.sendMessage(chatId, `${row[0]} | ${row[1]} | ${row[2]}`);
+      } else {
+        bot.sendMessage(chatId, 'No record found.');
+      }
+    } catch (err) {
+      bot.sendMessage(chatId, 'Error reading spreadsheet.');
+      console.error(err);
     }
-
-    response.send(new Message.Text("Try: get FO Bartolome Ibanez"));
-});
-
-// EXPRESS SERVER
-const app = express();
-app.use(bodyParser.json());
-app.use("/viber/webhook", bot.middleware());
-
-app.listen(3000, () => {
-    console.log("Bot is running on port 3000");
+  }
 });
