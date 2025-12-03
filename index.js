@@ -32,9 +32,9 @@ bot.on('message', async (msg) => {
     const name = text.replace('get FO ', '').trim();
     try {
       const res = await sheets.spreadsheets.values.get({
-        spreadsheetId: process.env.SPREADSHEET_ID,
-        range: 'Sheet1!A:D', // includes timestamp, FO name, Area, Number
-      });
+  spreadsheetId: process.env.SPREADSHEET_ID,
+  range: 'Form Responses 1!A:D', // <- use the actual tab name
+});
 
       // FO Name is column B (index 1)
       const row = res.data.values.find(r => r[1] === name);
