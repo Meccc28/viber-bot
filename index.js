@@ -33,7 +33,7 @@ bot.on('message', async (msg) => {
     try {
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SPREADSHEET_ID,
-        range: 'Form Responses 1!A:D', // <- update if your sheet tab name is different
+        range: 'FO!B:D', // <- update if your sheet tab name is different
       });
 
       // FO Name is column B (index 1)
