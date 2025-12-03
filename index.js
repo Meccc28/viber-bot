@@ -6,9 +6,15 @@ const { google } = require('googleapis');
 const app = express();
 app.use(bodyParser.json());
 
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
-const url = process.env.RENDER_EXTERNAL_URL;
-const port = process.env.PORT || 10000;
+// Environment variables from Render
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
+const PORT = process.env.PORT || 10000; // Render sets PORT automatically
+const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
+
+// Initialize bot **without polling**
+const bot = new TelegramBot(TOKEN);
+bot.setWebHook(`${RENDER_EXTERNAL_URL}/bot${TOKEN}`);
 
 // Google Sheets setup
 const auth = new google.auth.GoogleAuth({
@@ -18,39 +24,43 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 // Telegram webhook endpoint
-app.post(`/bot${process.env.TELEGRAM_BOT_TOKEN}`, async (req, res) => {
-  const msg = req.body.message;
-  if (!msg) return res.sendStatus(200);
+app.post(`/bot${TOKEN}`, async (req, res) => {
+  const update = req.body;
 
-  const chatId = msg.chat.id;
-  const text = msg.text;
+  if (update.message) {
+    const chatId = update.message.chat.id;
+    const text = update.message.text;
 
-  if (text.startsWith('get FO')) {
-    const name = text.replace('get FO ', '').trim();
-    try {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: process.env.SPREADSHEET_ID,
-        range: 'FO!B:D', // Adjust for your sheet
-      });
+    if (text.startsWith('get FO')) {
+      const name = text.replace('get FO ', '').trim();
 
-      const row = response.data.values.find(r => r[0] === name);
-      if (row) {
-        bot.sendMessage(chatId, `${row[0]} | ${row[1]} | ${row[2]}`);
-      } else {
-        bot.sendMessage(chatId, 'No record found.');
+      try {
+        const response = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: 'FO!B:D', // Adjust tab name and columns
+        });
+
+        const row = response.data.values.find(r => r[0] === name);
+        if (row) {
+          await bot.sendMessage(chatId, `${row[0]} | ${row[1]} | ${row[2]}`);
+        } else {
+          await bot.sendMessage(chatId, 'No record found.');
+        }
+      } catch (err) {
+        console.error('Error reading spreadsheet:', err);
+        await bot.sendMessage(chatId, 'Error reading spreadsheet.');
       }
-    } catch (err) {
-      bot.sendMessage(chatId, 'Error reading spreadsheet.');
-      console.error(err);
     }
   }
 
-  res.sendStatus(200);
+  res.sendStatus(200); // Respond to Telegram
 });
 
-// Set webhook
-bot.setWebHook(`${url}/bot${process.env.TELEGRAM_BOT_TOKEN}`);
+// Optional root endpoint
+app.get('/', (req, res) => {
+  res.send('Telegram bot is running!');
+});
 
-app.listen(port, () => {
-  console.log(`Web server running on port ${port}`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
