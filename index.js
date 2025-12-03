@@ -29,15 +29,15 @@ bot.on('message', async (msg) => {
   const text = msg.text;
 
   if (text && text.startsWith('get FO')) {
-    const name = text.replace('get FO ', '').trim();
+    const name = text.replace('get FO ', '').trim().toLowerCase(); // normalize input
     try {
       const res = await sheets.spreadsheets.values.get({
-  spreadsheetId: process.env.SPREADSHEET_ID,
-  range: 'Form Responses 1!A:D', // <- use the actual tab name
-});
+        spreadsheetId: process.env.SPREADSHEET_ID,
+        range: 'Form Responses 1!A:D', // <- update if your sheet tab name is different
+      });
 
       // FO Name is column B (index 1)
-      const row = res.data.values.find(r => r[1] === name);
+      const row = res.data.values.find(r => r[1].trim().toLowerCase() === name);
 
       if (row) {
         bot.sendMessage(chatId, `${row[1]} | ${row[2]} | ${row[3]}`);
