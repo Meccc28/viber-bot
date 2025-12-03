@@ -1,46 +1,43 @@
-// ----- Express server for Render free plan -----
 const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => res.send('Bot is running!'));
-
-app.listen(PORT, () => console.log(`Web server running on port ${PORT}`));
-
-// ----- Telegram bot setup -----
+const bodyParser = require('body-parser');
 const TelegramBot = require('node-telegram-bot-api');
 const { google } = require('googleapis');
 
-// Polling with restart to fix 409 conflict
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { 
-  polling: { restart: true } 
-});
+// Express setup
+const app = express();
+app.use(bodyParser.json());
 
-// ----- Google Sheets setup -----
+// Telegram bot setup
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+const url = process.env.RENDER_EXTERNAL_URL; // Render auto-provides this
+bot.setWebHook(`${url}/bot`);
+
+// Google Sheets setup
 const auth = new google.auth.GoogleAuth({
   credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
   scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
 });
 const sheets = google.sheets({ version: 'v4', auth });
 
-// ----- Command listener -----
-bot.on('message', async (msg) => {
+// Webhook route
+app.post('/bot', async (req, res) => {
+  const msg = req.body.message;
+  if (!msg) return res.sendStatus(200);
+
   const chatId = msg.chat.id;
   const text = msg.text;
 
   if (text && text.startsWith('get FO')) {
-    const name = text.replace('get FO ', '').trim().toLowerCase(); // normalize input
+    const name = text.replace('get FO ', '').trim();
     try {
-      const res = await sheets.spreadsheets.values.get({
+      const resSheets = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SPREADSHEET_ID,
-        range: 'FO!B:D', // <- update if your sheet tab name is different
+        range: 'FO!B:D', // columns B-D in FO tab
       });
 
-      // FO Name is column B (index 1)
-      const row = res.data.values.find(r => r[1].trim().toLowerCase() === name);
-
+      const row = resSheets.data.values.find(r => r[0] === name);
       if (row) {
-        bot.sendMessage(chatId, `${row[1]} | ${row[2]} | ${row[3]}`);
+        bot.sendMessage(chatId, `${row[0]} | ${row[1]} | ${row[2]}`);
       } else {
         bot.sendMessage(chatId, 'No record found.');
       }
@@ -49,4 +46,12 @@ bot.on('message', async (msg) => {
       console.error(err);
     }
   }
+
+  res.sendStatus(200);
+});
+
+// Start server
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
