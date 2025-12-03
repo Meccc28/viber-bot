@@ -3,14 +3,12 @@ const bodyParser = require('body-parser');
 const TelegramBot = require('node-telegram-bot-api');
 const { google } = require('googleapis');
 
-// Express setup
 const app = express();
 app.use(bodyParser.json());
 
-// Telegram bot setup
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
-const url = process.env.RENDER_EXTERNAL_URL; // Render auto-provides this
-bot.setWebHook(`${url}/bot`);
+const url = process.env.RENDER_EXTERNAL_URL;
+const port = process.env.PORT || 10000;
 
 // Google Sheets setup
 const auth = new google.auth.GoogleAuth({
@@ -19,23 +17,23 @@ const auth = new google.auth.GoogleAuth({
 });
 const sheets = google.sheets({ version: 'v4', auth });
 
-// Webhook route
-app.post('/bot', async (req, res) => {
+// Telegram webhook endpoint
+app.post(`/bot${process.env.TELEGRAM_BOT_TOKEN}`, async (req, res) => {
   const msg = req.body.message;
   if (!msg) return res.sendStatus(200);
 
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  if (text && text.startsWith('get FO')) {
+  if (text.startsWith('get FO')) {
     const name = text.replace('get FO ', '').trim();
     try {
-      const resSheets = await sheets.spreadsheets.values.get({
+      const response = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SPREADSHEET_ID,
-        range: 'FO!B:D', // columns B-D in FO tab
+        range: 'FO!B:D', // Adjust for your sheet
       });
 
-      const row = resSheets.data.values.find(r => r[0] === name);
+      const row = response.data.values.find(r => r[0] === name);
       if (row) {
         bot.sendMessage(chatId, `${row[0]} | ${row[1]} | ${row[2]}`);
       } else {
@@ -50,8 +48,9 @@ app.post('/bot', async (req, res) => {
   res.sendStatus(200);
 });
 
-// Start server
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Set webhook
+bot.setWebHook(`${url}/bot${process.env.TELEGRAM_BOT_TOKEN}`);
+
+app.listen(port, () => {
+  console.log(`Web server running on port ${port}`);
 });
