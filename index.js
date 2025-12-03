@@ -24,21 +24,21 @@ bot.on('message', async (msg) => {
   const text = msg.text?.trim();
   if (!text) return;
 
-  // Check if message starts with "get "
-  if (/^get\s+/i.test(text)) {
-    const query = text.replace(/^get\s+/i, '').trim();
+  try {
+    const client = await auth.getClient();
+    const res = await sheets.spreadsheets.values.get({
+      auth: client,
+      spreadsheetId: SPREADSHEET_ID,
+      range: SHEET_RANGE,
+    });
 
-    try {
-      const client = await auth.getClient();
-      const res = await sheets.spreadsheets.values.get({
-        auth: client,
-        spreadsheetId: SPREADSHEET_ID,
-        range: SHEET_RANGE,
-      });
+    const rows = res.data.values || [];
+    const dataRows = rows.slice(1); // skip header
 
-      const rows = res.data.values || [];
-      // Filter out header row and match case-insensitive
-      const results = rows.slice(1).filter(row => row[0]?.trim().toLowerCase() === query.toLowerCase());
+    // Handle "get <name>"
+    if (/^get\s+/i.test(text)) {
+      const query = text.replace(/^get\s+/i, '').trim();
+      const results = dataRows.filter(row => row[0]?.trim().toLowerCase() === query.toLowerCase());
 
       if (results.length === 0) {
         bot.sendMessage(chatId, 'No record found.');
@@ -48,14 +48,30 @@ bot.on('message', async (msg) => {
           bot.sendMessage(chatId, `${name} | ${area} | ${number}`);
         });
       }
-    } catch (err) {
-      console.error(err);
-      bot.sendMessage(chatId, 'Error accessing the spreadsheet.');
     }
+
+    // Handle "list FO"
+    else if (/^list\s+FO$/i.test(text)) {
+      const foList = dataRows.map(row => row[0]).filter(Boolean); // column B
+      if (foList.length === 0) {
+        bot.sendMessage(chatId, 'No FO records found.');
+      } else {
+        // Send in chunks if list is long
+        const chunkSize = 30;
+        for (let i = 0; i < foList.length; i += chunkSize) {
+          const chunk = foList.slice(i, i + chunkSize).join('\n');
+          bot.sendMessage(chatId, chunk);
+        }
+      }
+    }
+
+  } catch (err) {
+    console.error(err);
+    bot.sendMessage(chatId, 'Error accessing the spreadsheet.');
   }
 });
 
-// Optional: Keep a dummy web server running on Render
+// Optional: dummy web server for Render
 import express from 'express';
 const app = express();
 const PORT = process.env.PORT || 10000;
