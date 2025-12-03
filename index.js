@@ -1,83 +1,46 @@
-import TelegramBot from 'node-telegram-bot-api';
 import { google } from 'googleapis';
-import fs from 'fs';
-import path from 'path';
+import TelegramBot from 'node-telegram-bot-api';
 
-// --- Environment variables ---
-const token = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
-if (!token) {
-  console.error('Error: BOT_TOKEN or TELEGRAM_BOT_TOKEN is not set.');
-  process.exit(1);
-}
+// Initialize Telegram Bot
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
-const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-if (!SPREADSHEET_ID) {
-  console.error('Error: SPREADSHEET_ID is not set.');
-  process.exit(1);
-}
-
-const GOOGLE_APPLICATION_CREDENTIALS_JSON = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
-if (!GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-  console.error('Error: GOOGLE_APPLICATION_CREDENTIALS_JSON is not set.');
-  process.exit(1);
-}
-
-// --- Google Sheets setup ---
-const credentials = JSON.parse(GOOGLE_APPLICATION_CREDENTIALS_JSON);
-
-const auth = new google.auth.GoogleAuth({
-  credentials,
-  scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+// Google Sheets setup
+const sheets = google.sheets({
+  version: 'v4',
+  auth: new google.auth.GoogleAuth({
+    credentials: JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+  }),
 });
 
-const sheets = google.sheets({ version: 'v4', auth });
-
-// --- Telegram bot setup ---
-const bot = new TelegramBot(token, { polling: true });
-
-bot.onText(/get FO (.+)/i, async (msg, match) => {
+bot.onText(/get (.+)/i, async (msg, match) => {
   const chatId = msg.chat.id;
-  const nameQuery = match[1].trim().toLowerCase();
+  const searchValue = match[1].trim(); // e.g., A1, A2
 
   try {
+    // Fetch the entire sheet
     const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'FO!B:D',
+      spreadsheetId: process.env.SPREADSHEET_ID,
+      range: `FO!B:D`, // columns B, C, D
     });
 
-    const rows = res.data.values;
-    console.log(rows);
-    if (!rows || rows.length === 0) {
-      bot.sendMessage(chatId, 'No records found.');
-      return;
-    }
+    const rows = res.data.values || [];
 
-    const result = rows.find(row => row[0].toLowerCase() === nameQuery);
+    // Filter all rows where column C matches the searchValue
+    const matchedRows = rows.filter(r => r[1]?.trim() === searchValue);
 
-    if (result) {
-      bot.sendMessage(chatId, `Record found:\nB: ${result[0]}\nC: ${result[1] || ''}\nD: ${result[2] || ''}`);
+    if (matchedRows.length > 0) {
+      // Build response string
+      const response = matchedRows.map(r => `B: ${r[0]} | C: ${r[1]} | D: ${r[2]}`).join('\n');
+      bot.sendMessage(chatId, response);
     } else {
       bot.sendMessage(chatId, 'No record found.');
     }
-  } catch (error) {
-    console.error('Error fetching Google Sheet:', error);
-    bot.sendMessage(chatId, 'Error accessing the spreadsheet.');
+
+  } catch (err) {
+    console.error(err);
+    bot.sendMessage(chatId, 'Error fetching data.');
   }
 });
 
-bot.on('polling_error', (err) => {
-  console.error('Polling error:', err.code, err.message);
-});
-
-// --- Web server for Render health check ---
-import express from 'express';
-const app = express();
-const PORT = process.env.PORT || 10000;
-
-app.get('/', (req, res) => {
-  res.send('Telegram bot is running.');
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+console.log('Telegram bot running...');
